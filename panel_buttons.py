@@ -228,7 +228,7 @@ class StoplightPane(Pane):
 
 
 def click(button):
-    print("Button: %s" % (button,))
+    logging.info("Button: %s" % (button,))
 
 
 if __name__ == "__main__":

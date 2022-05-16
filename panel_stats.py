@@ -10,22 +10,30 @@ import logging
 from app_states import AnnoyerAppStates
 import json
 import os
+from tracking import HistoryTracker
+from tempfile import mktemp
+import sys
 
 
 class StatsPane(Pane):
     """
     Class for stats / graph.
     """
-    def __init__(self, tk_root, grid_col=2,  **kwargs):
+
+    def __init__(self, tk_root, grid_col=2, tracker=None, **kwargs):
         """
         :param tk_root: tk.Tk() object / frame
         :param grid_col: which column of the main app does this pane go into
+        :param tracker:  tracking.Tracker() object from main app
         :param kwargs:  additional arguments to Pane
         """
         logging.info("Creating stats pane.")
         self._resize_trigger = 0.95  # shrinking graph for more data
         self._resize_factor = 1.333
-        self._history = None
+        filename = mktemp(prefix='annoyer_user_data', suffix='.json') if tracker is None else None
+        self._tracker = tracker if tracker is not None else HistoryTracker(filename)
+        if tracker is None:
+            logging.warning('Creating new tracker with temporary file:  %s' % (filename,))
         self._shape = (500, 400)
         self._n_bar_spaces = 10
         self._max_bar_width = 6
@@ -36,7 +44,6 @@ class StatsPane(Pane):
                                                  None],
                                         **kwargs)
         self._canvas = self._pane_objects['middle']
-
         self.refresh()
 
     LAYOUT = {
@@ -102,21 +109,23 @@ class StatsPane(Pane):
         y_locs_px = (1.0 - np.array(durations) / y_max) * (margins['bottom'] - margins['top']) + margins['top']
         return x_locs_px, y_locs_px
 
-    def update_result(self, history):
+    def update_result(self, duration_sec, outcome_color, is_early=False):
         """
         This is called by the main app when the user ends an undistracted time-period by pushing a button.
         """
-        self._history = history
+        self._tracker.update_result(duration_sec, outcome_color, is_early=is_early)
         self.refresh()
 
     def refresh(self):
         """
         redraw everything
         """
+        history = self._tracker.get_history()
+
         bw = self.LAYOUT['border_width']
         margins = self._calc_margins()
 
-        durations = np.array(self._history['durations']) if self._history is not None else np.array([])
+        durations = np.array(history['durations']) if history is not None else np.array([])
 
         y_max = 2. ** (np.ceil(np.log(np.max(durations)) / np.log(2.0))) if durations.size > 0 else 32.0
         y_max = np.max([y_max, 64.0])
@@ -236,7 +245,7 @@ class StatsPane(Pane):
         _add_legend_item(cols_x[2], rows_y[1], 'green', text="- alarm early", early=False)
 
         for i, duration in enumerate(durations):
-            _draw_bar(px[i], py[i], self._history['outcomes'][i], early_shape=self._history['early'][i])
+            _draw_bar(px[i], py[i], history['outcomes'][i], early_shape=history['early'][i])
 
 
 if __name__ == "__main__":

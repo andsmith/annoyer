@@ -13,7 +13,7 @@ class ThermometerPane(Pane):
     """
     MAX_FRAC = 0.9999  # maximum prob. thresh.
 
-    def __init__(self, tk_root, grid_col=0, thresh_prob=0.667,  **kwargs):
+    def __init__(self, tk_root, grid_col=0, thresh_prob=0.667, **kwargs):
         """
         Start the "thermometer pane".
         :param tk_root: tk.Tk() object / frame

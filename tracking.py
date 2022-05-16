@@ -15,12 +15,58 @@ class HistoryTracker(object):
     Class to save/load & store results.
     """
 
-    def __init__(self, filename):
+    def __init__(self, filename, settings=None):
         """
         :param filename:  load/save to here
         """
+
         self._filename = filename
-        self._read_data()
+        self._history, self._settings = None, None
+        self._clear_data()
+        self._read_data()  # or make empty
+        if settings is None:
+            self._settings.update(settings)
+
+    def get_option(self, name):
+        return self._settings[name]
+
+    def set_option(self, name, value):
+        self._settings[name] = value
+
+    def _clear_data(self):
+        logging.info("Clearing user data.")
+        self.clear_history()
+        self._settings = {'sound_filename': None,
+                          'show_graph': False}
+
+    def clear_history(self):
+        logging.info("Clearing user history.")
+        self._history = {'durations': [],
+                         'outcomes': [],
+                         'early': []}
+
+    def set_history(self, new_history):
+        logging.info("Setting user history.")
+        self._history = new_history
+        self._save_data()
+
+    def select_new_sound_file(self):
+        filetypes = (('wav files', '*.wav'),
+                     ('mp3 files', '*.mp3'),
+                     ('all files', '*.*'))
+        sound_file = fd.askopenfilename(title='Select alarm sound to play...',
+                                        filetypes=filetypes,
+                                        initialdir='.')
+
+        if sound_file is None or len(sound_file) == 0:
+            logging.warning("No alarm sound selected, alarm will not sound!")
+            sound_file = None
+        else:
+            logging.info("Selected sound file:  %s" % (self._settings['sound_filename'],))
+
+        self._settings['sound_filename'] = sound_file
+        self._save_data()
+        return sound_file
 
     def _read_data(self):
         """
@@ -35,16 +81,8 @@ class HistoryTracker(object):
             logging.info("\talarm sound file:  %s" % (self._settings['sound_filename'],))
         else:
             logging.info("User file not found, creating:  %s " % (self._filename,))
-            self._history = {'durations': [],
-                             'outcomes': [],
-                             'early': []}
-            filetypes = (('wav files', '*.wav'),
-                         ('mp3 files', '*.mp3'),
-                         ('all files', '*.*'))
-            self._settings = {
-                'sound_filename': fd.askopenfilename(title='Select alarm sound to play...', filetypes=filetypes,
-                                                     initialdir='/')
-            }
+            self._clear_data()
+            self.select_new_sound_file()
             self._save_data()
 
     def get_sound_filename(self):

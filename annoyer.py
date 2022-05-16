@@ -35,68 +35,111 @@ class AnnoyerApp(object):
         :param init_period_sec:  Initial base rate of distraction
         :param delta_t_sec:  For updating UI
         """
+        # params
         self._delta_t_sec = delta_t_sec
+        self._thresh = init_thresh
+        self._period_sec = init_period_sec
+
+        # UI
         self._root = tk.Tk()
+        self._root.title("Annoyer!")
+        self._tracker = HistoryTracker(self.HISTORY_FILE, settings={'show_graph': show_graph_pane})
+
+        # state
         self._start_time, self._alarm_time = None, None
         self._state = AnnoyerAppStates.WAITING
-        self._play_obj = None
-        self._root.title("Annoyer!")
-        self._thresh = init_thresh
-        self._ui_wait = Event()
-        self._show_graph_pane = show_graph_pane
 
-        self._tracker = HistoryTracker(self.HISTORY_FILE)
+        # sound
+        self._play_obj = None
         self._sound_file = self._tracker.get_sound_filename()
-        if not os.path.exists(self._sound_file):
-            raise Exception("Sound file not found:  %s" % (self._sound_file,))
+        if self._sound_file is not None:
+            if not os.path.exists(self._sound_file):
+                raise Exception("Sound file not found:  %s" % (self._sound_file,))
+        else:
+            logging.warning("Sound file is not selected, alarm will not play")
         logging.info("App got sound file:  %s" % (self._sound_file,))
-        self._wave_obj = sa.WaveObject.from_wave_file(self._sound_file)
+        self._wave_obj = None
+
+        # UI objects
         self._stats_pane = None
         self._thermometer_pane = ThermometerPane(self._root, thresh_prob=self._thresh, callback=self._adjust_threshold)
         self._stoplight_pane = StoplightPane(self._root, callback=self._handle_buttons)
         self._button_frame = self._stoplight_pane.get_pane_object()['bottom']
-        self._setup_buttons()
-        self._root.columnconfigure(0, weight=self.COL_WEIGHTS['thermometer'])
-        self._root.columnconfigure(1, weight=self.COL_WEIGHTS['stoplight'])
-        self._period_sec = init_period_sec
 
+        # callbacks
         self._update_functions = [self._thermometer_pane.update,
                                   self._stoplight_pane.update]  # stats panel not updated in real time
-
-        self._root.columnconfigure(0, weight=self.COL_WEIGHTS['thermometer'])
-        self._root.columnconfigure(1, weight=self.COL_WEIGHTS['stoplight'])
-        if self._show_graph_pane:
-            self._stats_pane = StatsPane(self._root)
-            self._stats_pane.update_result(self._tracker.get_history())
+        # optional UI objects
+        if self._tracker.get_option('show_graph'):
+            self._stats_pane = self._make_stats_pane()
             self._root.columnconfigure(2, weight=self.COL_WEIGHTS['graph'])
 
+        # layout
+        self._root.columnconfigure(0, weight=self.COL_WEIGHTS['thermometer'])
+        self._root.columnconfigure(1, weight=self.COL_WEIGHTS['stoplight'])
+        self._root.columnconfigure(0, weight=self.COL_WEIGHTS['thermometer'])
+        self._root.columnconfigure(1, weight=self.COL_WEIGHTS['stoplight'])
         self._root.rowconfigure(0, weight=1)
+
+        # finish
+        self._setup_buttons()
         self.reset()
-        self._clock()
+        self._clock()  # start ticking...
+
+    def _make_stats_pane(self):
+        return StatsPane(self._root, grid_col=2, tracker=self._tracker)
 
     def _setup_buttons(self):
         """
         Add buttons for main app.
         """
+        common_params = dict(ipadx=5, ipady=4, padx=8, pady=6)
+
+        # clear data
+        self._clear_data_button = tk.Button(master=self._button_frame,
+                                            text="Clear data.",
+                                            command=self._clear_data)
+        self._clear_data_button.grid(column=0, row=0, **common_params)
+
+        # change sound
+        self._change_sound_button = tk.Button(master=self._button_frame,
+                                              text="Select new\nsound file.",
+                                              command=self._select_new_sound_file)
+        self._change_sound_button.grid(column=1, row=0, **common_params)
+
+        # show / hide graph
         self._show_graph_button = tk.Button(master=self._button_frame,
-                                            text="Hide / show graph -->",
+                                            text="Hide / show\ngraph -->",
                                             command=self._toggle_graph)
-        self._show_graph_button.grid(column=0, row=0, ipadx=5, ipady=4, padx=8, pady=6)
+        self._show_graph_button.grid(column=2, row=0, **common_params)
+
         self._button_frame.columnconfigure(0, weight=1)
+        self._button_frame.columnconfigure(1, weight=1)
+        self._button_frame.columnconfigure(2, weight=1)
         self._button_frame.rowconfigure(0, weight=1)
+
+    def _select_new_sound_file(self):
+        self._sound_file = self._tracker.select_new_sound_file()
+        if self._play_obj is not None and self._play_obj.is_playing():
+            self._play_obj.stop()
+            self._play_obj = None
+
+    def _clear_data(self):
+        self._tracker.clear_history()
+        if self._stats_pane is not None:
+            self._stats_pane.refresh()
 
     def _toggle_graph(self):
         """
         Show/hide graph part of app
         """
-        if self._show_graph_pane:
+        if self._tracker.get_option('show_graph'):
             self._show_graph_pane = False
             self._stats_pane.deactivate()
-            del self._stats_pane
+            self._stats_pane = None
         else:
             self._show_graph_pane = True
-            self._stats_pane = StatsPane(self._root)
-            self._stats_pane.update_result(self._tracker.get_history())
+            self._stats_pane = self._make_stats_pane()
             self._root.columnconfigure(2, weight=self.COL_WEIGHTS['graph'])
 
     def _clock(self):
@@ -106,12 +149,31 @@ class AnnoyerApp(object):
         self._tick()
         self._root.after(int(self._delta_t_sec * 1000), self._clock)  # schedule next tick.
 
-    def _sound_alarm(self):
-        self._play_obj = self._wave_obj.play()
+    def _become_alarmed(self):
+        self._play_sound()
         self._state = AnnoyerAppStates.ALARMING
 
-    def _stop_alarm(self):
-        self._play_obj.stop()
+    def _play_sound(self):
+        if self._sound_file is not None:
+            self._wave_obj = self._wave_obj if self._wave_obj is not None else sa.WaveObject.from_wave_file(
+                self._sound_file)
+
+            if self._play_obj is not None:
+                if not self._play_obj.is_playing():
+                    logging.info("Replaying alarm on loop... ")
+                    self._play_obj = self._wave_obj.play()
+            else:
+
+                logging.info("Starting alarm sound...")
+                self._play_obj = self._wave_obj.play()
+
+    def _stop_sound(self):
+        if self._play_obj is not None:
+            self._play_obj.stop()
+            self._play_obj = None
+
+    def _become_unalarmed(self):
+        self._stop_sound()
         self._state = AnnoyerAppStates.WAITING
 
     def reset(self):
@@ -164,15 +226,13 @@ class AnnoyerApp(object):
         """
         if self._state == AnnoyerAppStates.WAITING:
             if self._thermometer_pane.get_current_prob() > self._thresh:
-                self._sound_alarm()
+                self._become_alarmed()
         elif self._state == AnnoyerAppStates.ALARMING:
             if self._thermometer_pane.get_current_prob() <= self._thresh:
-                self._stop_alarm()
+                self._become_unalarmed()
             else:
+                self._play_sound()
                 # make sure it's still playing
-                if not self._play_obj.is_playing():
-                    logging.info("Replaying alarm on loop... ")
-                    self._play_obj = self._wave_obj.play()
 
     def _adjust_threshold(self, thresh):
         """
@@ -190,20 +250,25 @@ class AnnoyerApp(object):
         """
         duration = time.time() - self._start_time
 
-        if self._state == AnnoyerAppStates.ALARMING:
-            self._tracker.update_result(duration_sec=duration, outcome_color=button, is_early=False)
+        # Silence any alarms
+        alarm_was_on = self._state == AnnoyerAppStates.ALARMING
+        if alarm_was_on:
+            self._become_unalarmed()
 
-            self._stop_alarm()
-            self._update_params(button, alarm_was_on=True)
+        # Update parameters (delay, etc.)
+        self._adapt_params(button, alarm_was_on=alarm_was_on)
 
-        elif self._state == AnnoyerAppStates.WAITING:
-            self._tracker.update_result(duration_sec=duration, outcome_color=button, is_early=True)
-            self._update_params(button, alarm_was_on=False)
+        # update tracker
+        self._tracker.update_result(duration_sec=duration,
+                                    outcome_color=button,
+                                    is_early=not alarm_was_on)
+
         if self._stats_pane is not None:
-            self._stats_pane.update_result(history=self._tracker.get_history())
+            self._stats_pane.refresh()
+
         self.reset()
 
-    def _update_params(self, button, alarm_was_on):
+    def _adapt_params(self, button, alarm_was_on):
         """
         Adapt rate to button presses.  For new, heuristic, later, Bayesian.
 

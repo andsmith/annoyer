@@ -24,7 +24,7 @@ You can push before/after the alarm has gone off (this will reset the timer to 0
 
 * See the graph to see if you're getting more/less easily distracted.  User history is loaded & saved each time. 
 
-* To clear settings/history/sound-file selection:  move the file `history.json` to clear the user history / alarm sound file.
+* To clear settings/history/sound-file selection:  move/delete the file `history.json`.
 ## To do:
 * make units adaptive on vertical axis of graph
 ## Credits:

@@ -9,6 +9,7 @@ import numpy as np
 from app_states import AnnoyerAppStates
 import tkinter.font as tkFont
 from enum import IntEnum
+from tracking import HistoryTracker
 
 
 class StopligtStates(IntEnum):
@@ -38,20 +39,20 @@ class StoplightPane(Pane):
               'button_font': None  # init later
               }
 
-    def __init__(self, tk_root, grid_col=1, **kwargs):
+    def __init__(self, tk_root, tracker=None, grid_col=1, **kwargs):
         """
         :param tk_root: tk.Tk() object/ frame
         :param grid_col: Which column of the app does this go in?
         :param kwargs:  Additional arguments to Pane
         """
         logging.info("Creating stoplight-button pane.")
-
         self._shape = (500, 250)
         self._state = StopligtStates.NORMAL
         self._blink_state = 0
         self._blink_delay_sec = 0.5
         super(StoplightPane, self).__init__(tk_root,
-                                            grid_col,
+                                            tracker=tracker,
+                                            grid_col=grid_col,
                                             regions=[None,
                                                      self._shape,
                                                      ('frame',)],
@@ -102,15 +103,18 @@ class StoplightPane(Pane):
             self._blink_state = 0
             self._canvas.configure(bg=self.LAYOUT['background_colors'][self._blink_state])
 
-    def update(self, info):
+    def update_period(self):
+        pass
+
+    def update_tick(self):
         """
         Main app calls this every tick with its state.
         :param info: dict, must have value of type AnnoyerAppState for key 'state'
         """
-        if info['state'] == AnnoyerAppStates.ALARMING:
+        if self._tracker.is_alarmed():
             if self._state == StopligtStates.NORMAL:
                 self._start_alarming()
-        elif info['state'] == AnnoyerAppStates.WAITING:
+        else:
             if self._state == StopligtStates.ALARMING:
                 self._stop_alarming()
 

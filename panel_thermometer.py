@@ -5,6 +5,8 @@ from panels import Pane, PaneTester
 import tkinter as tk
 import logging
 import numpy as np
+from tracking import HistoryTracker
+import datetime
 
 
 class ThermometerPane(Pane):
@@ -13,25 +15,22 @@ class ThermometerPane(Pane):
     """
     MAX_FRAC = 0.9999  # maximum prob. thresh.
 
-    def __init__(self, tk_root, grid_col=0, thresh_prob=0.667, **kwargs):
+    def __init__(self, tk_root, tracker=None, grid_col=0, **kwargs):
         """
         Start the "thermometer pane".
         :param tk_root: tk.Tk() object / frame
+        :param tracker:  HistoryTracker() object or None
         :param grid_col: which of the app's main columns does this pane go into?
         :param thresh_prob: where to draw cutoff
         :param kwargs: args for Pane.__init__()
         """
         logging.info("Creating thermometer pane.")
-        self._thresh = thresh_prob
         self._shape = (500, 250)
-        self._current_prob = 0.5654654
+
         self._level_one_y, self._level_zero_y, self._x_left, self._x_right = None, None, None, None
         self._mouse_buttons = {'right': None,
                                'left': None,
                                'middle': None}
-        self._elapsed_time_str = ""
-        self._period_str = ""
-        self._countdown_str = ""
         self._objects = {'lines': None,
                          'red_line': None,
                          'fill': None,
@@ -41,7 +40,8 @@ class ThermometerPane(Pane):
                          'tic_lines': [],
                          'tic_labels': []}
 
-        super(ThermometerPane, self).__init__(tk_root, grid_col, regions=['blank', self._shape, 'blank'], **kwargs)
+        super(ThermometerPane, self).__init__(tk_root, tracker=tracker, grid_col=grid_col,
+                                              regions=['blank', self._shape, 'blank'], **kwargs)
         self._canvas = self._pane_objects['middle']
         self._title = self._pane_objects['top']
         self._status = self._pane_objects['bottom']
@@ -57,36 +57,30 @@ class ThermometerPane(Pane):
         self._mouse_buttons['left'] = event
         self._set_ui_threshold(event)
 
-    def get_current_prob(self):
-        """
-        :returns:  Current probability user has become distracted.
-        """
-        return self._current_prob
-
-    def update(self, info):
+    def update_tick(self):
         """
         Main app calls this during each tick.
-        Re-estimate probabilities, and redraw thermometer, etc.
         """
-        if info['elapsed_sec'] is not None:
-            lambda_par = 1.0 / info['period_sec']
-            t = info['elapsed_sec']
-            self._elapsed_time_str = info['elapsed_time_str']
-            self._period_str = info['period_str']
-            self._countdown_str = info['countdown_str']
-            self._current_prob = 1.0 - np.exp(-lambda_par * t)  # exp. dist. CDF
-            frac = info['elapsed_sec'] / info['period_sec']
-            # logging.info("Estimating %.4f probability with %s remaining (%.2f complete)" % (self._current_prob,
-            #                                                                                info['countdown_str'],
-            #                                                                                frac * 100.0))
-            self.refresh()
+
+        self.refresh()
+
+    def update_period(self):
+        """
+        Main app calls this during each tick.
+        """
+        pass
 
     def _unclick(self, event):
         """
         User let go of mouse.
         :param event:  tkinter mouse event object
         """
-        self._mouse_buttons['left'] = None
+        self._mouse_buttons['left'] = None  # signal for not sliding anymore
+        if self._callback is not None:
+            self._callback(self._tracker.get_option('p_threshold'))
+
+    def is_sliding(self):
+        return self._mouse_buttons['left'] is not None
 
     def _move(self, event):
         """
@@ -107,12 +101,12 @@ class ThermometerPane(Pane):
 
         frac = 1.0 - (y_click - y_low) / (y_high - y_low)
         frac = frac if frac <= self.MAX_FRAC else self.MAX_FRAC
-        frac = frac if frac > 0.0 else 0.0
+        thresh = frac if frac > 0.0 else 0.0
 
-        self._thresh = frac
-        self.refresh()
         if self._callback is not None:
-            self._callback(self._thresh)
+            self._callback(thresh)
+
+        self.refresh()
 
     LAYOUT = {'y_center': 0.84,
               'x_center': 0.50,
@@ -135,7 +129,7 @@ class ThermometerPane(Pane):
         Re-draw all the things.
         """
         self._canvas.delete('all')
-
+        thresh = self._tracker.get_option('p_threshold')
         # BODY
         theta = np.linspace(self.LAYOUT['bulb_angles'][0], self.LAYOUT['bulb_angles'][1], 100)[::-1]
         aspect = float(self._shape[1]) / float(self._shape[0])
@@ -150,8 +144,8 @@ class ThermometerPane(Pane):
         self._level_zero_y = yb[0] - 0.03
         self._level_one_y = self.LAYOUT['bulb_top']
         self._x_left, self._x_right = x0, x1
-
-        level_prob_y = self._level_zero_y * (1.0 - self._current_prob) + self._level_one_y * self._current_prob
+        current_prob = self._tracker.get_current_prob()
+        level_prob_y = self._level_zero_y * (1.0 - current_prob) + self._level_one_y * current_prob
 
         x_partial = np.hstack([x0, xb, x1])
         y_partial = np.hstack([level_prob_y, yb, level_prob_y
@@ -190,14 +184,14 @@ class ThermometerPane(Pane):
 
         # Alarm,
         x_rel = x0 - (x1 - x0) * 0.67, x1
-        y_rel = self._level_zero_y * (1.0 - self._thresh) + self._level_one_y * self._thresh
+        y_rel = self._level_zero_y * (1.0 - thresh) + self._level_one_y * thresh
         coord_list = [x_rel[0] * self._shape[1], y_rel * self._shape[0],
                       x_rel[1] * self._shape[1], y_rel * self._shape[0]]
 
         self._objects['threshold'] = self._canvas.create_line(*coord_list, fill=self.LAYOUT['threshold_color'],
                                                               width=self.LAYOUT['threshold_width'])
 
-        thresh_txt = "%.2f %% " % (self._thresh * 100.0,)
+        thresh_txt = "%.2f %% " % (thresh * 100.0,)
         text_x, text_y = coord_list[0], coord_list[1]
 
         self._objects['threshold_label'] = self._canvas.create_text(text_x, text_y, text=thresh_txt,
@@ -212,9 +206,16 @@ class ThermometerPane(Pane):
                                                                    fill=self.LAYOUT['instructions_color'])
 
         # text
+        period_td = datetime.timedelta(seconds=self._tracker.get_option('period_sec'))
+        period_str = str(period_td - datetime.timedelta(microseconds=period_td.microseconds))
+        elapsed_td = datetime.timedelta(seconds=self._tracker.get_elapsed_seconds())
+        elapsed_str = str(elapsed_td - datetime.timedelta(microseconds=elapsed_td.microseconds))
+        remaining = int(self._tracker.predict_alarm_wait_time() - elapsed_td.total_seconds()) + 1
+        countdown_str = str(datetime.timedelta(seconds=remaining))
+
         self._title.configure(text="P(distraction | t=%s) = %.4f\nP exceeds threshold in %s" % (
-            self._elapsed_time_str, self._current_prob, self._countdown_str))
-        self._status.configure(text="Estimated period between\n distractions:  %s" % (self._period_str,))
+            elapsed_str, current_prob, countdown_str))
+        self._status.configure(text="Estimated period between\n distractions:  %s" % (period_str,))
 
     def _resize(self, event):
         self._shape = (event.height, event.width)

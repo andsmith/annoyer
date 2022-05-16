@@ -5,6 +5,7 @@ from copy import deepcopy
 from abc import abstractmethod
 import logging
 import tkinter as tk
+from tracking import HistoryTracker
 
 
 class Pane(object):
@@ -23,23 +24,27 @@ class Pane(object):
     TEXT_LABEL_PARAMS = dict()  # dict(borderwidth=1, relief="solid")
     CANVAS_PARAMS = dict()  # dict(borderwidth=1, relief="solid")
 
-    def __init__(self, tk_root, grid_col, callback=None, regions=(None, None, None), canvas_args=None, **kwargs):
+    def __init__(self, tk_root, tracker=None, grid_col=0, callback=None,
+                 regions=(None, None, None), canvas_args=None,  frame_args=None):
         """
         :param tk_root:  tk.Tk() object
+        :param tracker:  HistoryTracker() object or None
         :param grid_col:  Which column of app?
         :param callback: if the pane needs to notify the main app for something, use this function.
         :param regions:  3-tuple (text for top, (h, w) of middle canvas, text for bottom), or NONE for one/two of those.
             or ('frame', ) for an (empty) frame
             :param canvas_args:  arguments to initialize the tkinter Canvas object
-        :param kwargs:  more arguments to Frame
+        :param frame_args:  more arguments to Frame(**frame_args)
         """
+        self._tracker = tracker if tracker is not None else HistoryTracker()
+
         self._canvas_args = canvas_args if canvas_args is not None else {}
         self._callback = callback
         self._regions = {'top': regions[0], 'middle': regions[1], 'bottom': regions[2]}
         self._root = tk_root
         self._grid_col = grid_col
         logging.info("init with col: %i" % (grid_col,))
-        self._frame_kwargs = kwargs
+        self._frame_kwargs = frame_args if frame_args is not None else {}
         self._init_frame()
 
     def _init_frame(self):
@@ -98,27 +103,37 @@ class Pane(object):
     def get_pane_object(self):
         return self._pane_objects
 
+    '''
     @abstractmethod
     def _resize(self, event):  # for resize
         pass
 
     @abstractmethod
-    def update(self, info):  # to get new data
+    def update_tick(self):  # to get new data
         """
         Main app calls this every tick with its state.
-        :param info:  dict with 'state':  AnnoyerAppState enum, other metrics
         """
         pass
 
     @abstractmethod
+    def update_period(self):  # to get new data
+        """
+        Main app calls this at the end of a time period
+        """
+        pass
+
+
+    @abstractmethod
     def refresh(self):
         pass
+    '''
 
 
 class PaneTester(object):
     """
     Run each of the subclasses by itself.  (i.e. not part of the main app)
     """
+
     def __init__(self, pane_type, **kwargs):
         """
         :param pane_type:  object inheriting from Pane
@@ -129,5 +144,9 @@ class PaneTester(object):
         self._root.title("Pane tester (debugging)")
         self._root.columnconfigure(0, weight=1)
         self._root.rowconfigure(0, weight=1)
-        self._pane = pane_type(self._root, **kwargs)
+        settings = {'sound_file': 'doesnt_exist.wav'}
+
+        self._tracker = HistoryTracker(settings=settings)
+
+        self._pane = pane_type(self._root, tracker=self._tracker, **kwargs)
         self._root.mainloop()

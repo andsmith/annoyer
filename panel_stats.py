@@ -20,7 +20,7 @@ class StatsPane(Pane):
     Class for stats / graph.
     """
 
-    def __init__(self, tk_root, grid_col=2, tracker=None, **kwargs):
+    def __init__(self, tk_root, tracker=None, grid_col=2, **kwargs):
         """
         :param tk_root: tk.Tk() object / frame
         :param grid_col: which column of the main app does this pane go into
@@ -30,15 +30,12 @@ class StatsPane(Pane):
         logging.info("Creating stats pane.")
         self._resize_trigger = 0.95  # shrinking graph for more data
         self._resize_factor = 1.333
-        filename = mktemp(prefix='annoyer_user_data', suffix='.json') if tracker is None else None
-        self._tracker = tracker if tracker is not None else HistoryTracker(filename)
-        if tracker is None:
-            logging.warning('Creating new tracker with temporary file:  %s' % (filename,))
         self._shape = (500, 400)
         self._n_bar_spaces = 10
         self._max_bar_width = 6
         super(StatsPane, self).__init__(tk_root,
-                                        grid_col,
+                                        tracker=tracker,
+                                        grid_col=grid_col,
                                         regions=[None,
                                                  self._shape,
                                                  None],
@@ -109,7 +106,7 @@ class StatsPane(Pane):
         y_locs_px = (1.0 - np.array(durations) / y_max) * (margins['bottom'] - margins['top']) + margins['top']
         return x_locs_px, y_locs_px
 
-    def update_result(self, duration_sec, outcome_color, is_early=False):
+    def update_period(self, duration_sec, outcome_color, is_early=False):
         """
         This is called by the main app when the user ends an undistracted time-period by pushing a button.
         """
@@ -249,4 +246,5 @@ class StatsPane(Pane):
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
     PaneTester(StatsPane, callback=lambda x: None, grid_col=0)

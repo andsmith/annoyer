@@ -2,9 +2,7 @@
 Alarm system to predict when user is distracted &amp; "snap user out of it".
 
 ## Usage:
-1) run with this command:
-
-    > python annoyer.py
+1) run with this command:`> python annoyer.py`
 
 The main app has three panels:
 

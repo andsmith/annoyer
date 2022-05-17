@@ -76,36 +76,47 @@ class AnnoyerApp(object):
     def _make_stats_pane(self):
         return StatsPane(self._root, grid_col=2, tracker=self._tracker)
 
+    def _restart_timer(self):
+        self.reset()
+        self._check_for_alarm()
+
+
     def _setup_ui(self):
         """
         Add buttons/labels for main app.
         """
         button_params = dict(ipadx=2, ipady=2, padx=2, pady=1)
-        text_params = dict(padx=8, pady=2)
+        text_params = dict(padx=8, pady=12)
+        # clear data
+        self._clear_data_button = tk.Button(master=self._button_frame,
+                                            text="Restart timer.",
+                                            command=self._restart_timer)
+        self._clear_data_button.grid(column=0, row=0, **button_params, sticky='w')
+
         # clear data
         self._clear_data_button = tk.Button(master=self._button_frame,
                                             text="Clear data.",
                                             command=self._clear_data)
-        self._clear_data_button.grid(column=0, row=0, **button_params, sticky='w')
+        self._clear_data_button.grid(column=1, row=0, **button_params, sticky='w')
 
         # change sound
         self._change_sound_button = tk.Button(master=self._button_frame,
                                               text="Change / mute\nsound.",
                                               command=self._select_new_sound_file)
-        self._change_sound_button.grid(column=1, row=0, **button_params, sticky='w')
+        self._change_sound_button.grid(column=0, row=1, **button_params, sticky='w')
 
         # show / hide graph
         self._show_graph_button = tk.Button(master=self._button_frame,
                                             text="Hide / show\ngraph -->",
                                             command=self._toggle_graph)
-        self._show_graph_button.grid(column=2, row=0, **button_params, sticky='w')
+        self._show_graph_button.grid(column=1, row=1, **button_params, sticky='w')
 
         # labels
         self._sound_file_label_text = tk.StringVar()
 
         self._sound_file_label = tk.Label(master=self._button_frame, textvariable=self._sound_file_label_text,
-                                          justify=tk.RIGHT, **text_params)
-        self._sound_file_label.grid(column=0, row=1, columnspan=3, sticky='w')
+                                            **text_params)
+        self._sound_file_label.grid(column=0, row=2, columnspan=2 )
         self._update_ui()
 
         self._button_frame.columnconfigure(0, weight=1)
@@ -188,8 +199,8 @@ class AnnoyerApp(object):
         """
         Stop counting down to distraction, reset timer, etc.
         """
+        self._become_unalarmed()  # in case
         self._tracker.restart_period()
-        self._state = AnnoyerAppStates.WAITING
         self._tick()  # force re-draw
 
     def _tick(self):
@@ -224,8 +235,8 @@ class AnnoyerApp(object):
         :param thresh:  float, should be in [0, 1)
         """
         # logging.info("Annoyer - Adjusting threshold:  %s" % (thresh,))
-        suppres_save = self._thermometer_pane.is_sliding()
-        self._tracker.set_option('p_threshold', thresh, no_save=suppres_save)
+        suppress_save = self._thermometer_pane.is_sliding()
+        self._tracker.set_option('p_threshold', thresh, no_save=suppress_save)
         self._check_for_alarm()
 
     def _handle_buttons(self, button):
@@ -239,8 +250,11 @@ class AnnoyerApp(object):
         if alarm_was_on:
             self._become_unalarmed()
 
+        old_target_duration = self._tracker.predict_alarm_wait_time()
         self._adapt_params(button, alarm_was_on=alarm_was_on, no_save=True)  # will save in tracker.update_result()
-        self._tracker.update_result(outcome_color=button, is_early=not alarm_was_on)
+        self._tracker.update_result(outcome_color=button,
+                                    old_target_duration=old_target_duration,
+                                    is_early=not alarm_was_on)
         if self._stats_pane is not None:
             self._stats_pane.refresh()
 

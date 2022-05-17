@@ -61,7 +61,7 @@ class HistoryTracker(object):
     def clear_history(self):
         logging.info("Clearing user history.")
         self._history = {'durations': [],  # how long until user pushed a button
-                         'targets': [],  # how long until the alarm went off
+                         'target_durations': [],  # how long until the alarm went off
                          'outcomes': [],  # which button user pushed
                          'early': []}  # pushed before alarm?
 
@@ -87,7 +87,7 @@ class HistoryTracker(object):
             logging.info("Selected sound file:  %s" % (self._settings['sound_filename'],))
 
         self._settings['sound_filename'] = sound_file
-        print("s232")
+
         self._save_data()
         return sound_file
 
@@ -162,7 +162,7 @@ class HistoryTracker(object):
         """
         pass
 
-    def update_result(self, outcome_color, is_early=False):
+    def update_result(self, outcome_color, old_target_duration, is_early=False):
         """
         Called every time the user ends an undistracted period with a (stoplight) button push.
         :param
@@ -172,6 +172,7 @@ class HistoryTracker(object):
         self._history['durations'].append(duration_sec)
         self._history['outcomes'].append(outcome_color)
         self._history['early'].append(is_early)
+        self._history['target_durations'].append(old_target_duration)
         self._save_data()
 
 

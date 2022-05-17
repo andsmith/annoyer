@@ -48,13 +48,17 @@ class StatsPane(Pane):
         'border_width': 3,
         'bar_width': 4,
         'bar_color': 'black',
+        'bar_extended_color': 'gray',
+        'bar_extended_width': 3,
         'margins': {'top': 0.00,
                     'right': 0.95,
                     'bottom': 0.75,
                     'left': 0.2},
         'legend_pos': (0.15, 0.80),
+        'legend_line_length': 18,
+        'legend_line_width': 4,
         'legend_row_spacing': 27,
-        'legend_col_spacing': 120,
+        'legend_col_spacing': 150,
         'legend_indent': 12,
         'grid_color': 'gray',
         'grid_width': 1,
@@ -92,12 +96,12 @@ class StatsPane(Pane):
                     top=_repair(self.LAYOUT['margins']['top'] * self._shape[0], 0),
                     bottom=_repair(self.LAYOUT['margins']['bottom'] * self._shape[0], 0))
 
-    def _calc_bars(self, y_max, durations):
+    def _calc_bars(self, y_max, durations, intended_durations):
         """
         Determine x & y coordinates of bars of bar graph.
         """
         if durations.size == 0:
-            return np.array([]), np.array([])
+            return np.array([]), np.array([]), np.array([])
 
         n_bars = len(durations)
         n_bar_spaces = np.max([10, n_bars])
@@ -105,7 +109,9 @@ class StatsPane(Pane):
         x_locs_px = np.linspace(margins['left'], margins['right'], n_bar_spaces + 2)[1:-1]
 
         y_locs_px = (1.0 - np.array(durations) / y_max) * (margins['bottom'] - margins['top']) + margins['top']
-        return x_locs_px, y_locs_px
+        y_extended_locs_px = (1.0 - np.array(intended_durations) / y_max) * (margins['bottom'] - margins['top']) + \
+                             margins['top']
+        return x_locs_px, y_locs_px, y_extended_locs_px
 
     def update_period(self, duration_sec, outcome_color, is_early=False):
         """
@@ -124,8 +130,13 @@ class StatsPane(Pane):
         margins = self._calc_margins()
 
         durations = np.array(history['durations']) if history is not None else np.array([])
+        target_durations = np.array(history['target_durations']) if history is not None else np.array([])
 
-        y_max = 2. ** (np.ceil(np.log(np.max(durations)) / np.log(2.0))) if durations.size > 0 else 32.0
+        all_times = np.hstack([durations, target_durations])
+
+        max_time = np.max(all_times) * 1.1 if all_times.size>0 else 60.0
+
+        y_max = 2. ** (np.ceil(np.log(max_time) / np.log(2.0))) if all_times.size > 0 else 32.0
         y_max = np.max([y_max, 64.0])
         self._canvas.delete('all')
         # draw grid
@@ -157,10 +168,19 @@ class StatsPane(Pane):
             :param y: y-coordinate of grid_line (pixels
             :param y_value: value of y-coordinate (in time units) for writing label
             """
+
+            def _get_time_with_units(seconds):
+                if seconds < 60:
+                    return "%.2f sec. " % (seconds,)
+                elif seconds < 3600:
+                    return "%.1f min. " % (seconds / 60.)
+                else:
+                    return "%.1f hr. " % (seconds / 3600.)
+
             bar = self._canvas.create_line(x_left, y, x_right, y,
                                            fill=self.LAYOUT['grid_color'],
                                            width=self.LAYOUT['grid_width'])
-            tic_label = "%.1f sec. " % (y_value,)
+            tic_label = _get_time_with_units(y_value)
             note = self._canvas.create_text(x_left, y, text=tic_label,
                                             fill=self.LAYOUT['grid_color'],
                                             anchor='e')
@@ -179,9 +199,9 @@ class StatsPane(Pane):
                                       width=self.LAYOUT['border_width'])
 
         # draw bars
-        px, py = self._calc_bars(y_max, durations=durations)
+        px, py, iy = self._calc_bars(y_max, durations=durations, intended_durations=target_durations)
 
-        def _draw_bar(px, py, color, hide_bar=False, shape='round'):
+        def _draw_bar(px, py, color, iy, hide_bar=False, shape='round'):
             """
             Draw a bar for the bar graph, and put a marker on top to indicate which button ended it, and whether or not
             the alarm was sounding.
@@ -193,16 +213,31 @@ class StatsPane(Pane):
             """
 
             y0 = int(margins['bottom'])
-            p_x = int(px)
-            p_y = int(py)
+            p_x, p_y = int(px), int(py)
+            i_y = int(iy) if iy is not None else None
             line = None
             if not hide_bar:
                 line = self._canvas.create_line(p_x, y0,
                                                 p_x, p_y,
                                                 fill=self.LAYOUT['bar_color'],
                                                 width=self.LAYOUT['bar_width'])
+                if i_y is not None and p_y > i_y:  # extend line
+                    line = self._canvas.create_line(p_x, p_y,
+                                                    p_x, i_y,
+                                                    fill=self.LAYOUT['bar_extended_color'],
+                                                    width=self.LAYOUT['bar_extended_width'])
+
             fill_color = self.LAYOUT['outcome_colors'][color] if self.LAYOUT['outcome_colors'][color] is not None else \
                 self._canvas['background']
+
+            def _get_triangle_coords(x, y):
+
+                triangle_base, triangle_height = self.LAYOUT['triangle_base_and_height']
+                crds = [x - triangle_base / 2, y + triangle_height / 2,
+                        x + triangle_base / 2, y + triangle_height / 2,
+                        x, y - triangle_height / 2]
+                return crds
+
             if shape == 'square':
                 square_size = self.LAYOUT['square_size']
                 marker = self._canvas.create_rectangle(p_x - square_size, p_y - square_size,
@@ -219,10 +254,7 @@ class StatsPane(Pane):
                                                   outline='black',
                                                   width=1)
             elif shape == 'triangle':
-                triangle_base, triangle_height = self.LAYOUT['triangle_base_and_height']
-                coords = [px - triangle_base / 2, py + triangle_height / 2,
-                          px + triangle_base / 2, py + triangle_height / 2,
-                          px, py - triangle_height / 2]
+                coords = _get_triangle_coords(p_x, p_y)
                 marker = self._canvas.create_polygon(*coords,
                                                      fill=fill_color,
                                                      outline='black',
@@ -237,26 +269,36 @@ class StatsPane(Pane):
         row_0_y = legend_left[1]
         row_x = legend_left[0]
         self._canvas.create_text(row_x, row_0_y, text="Legend:")
-        rows_y = np.arange(1., 4.) * self.LAYOUT['legend_row_spacing'] + row_0_y
-        cols_x = np.arange(0., 4.) * self.LAYOUT['legend_col_spacing'] + row_x
+        rows_y = np.arange(1., 10.) * self.LAYOUT['legend_row_spacing'] + row_0_y
+        cols_x = np.arange(0., 2.) * self.LAYOUT['legend_col_spacing'] + row_x
 
         # shape
         indent = self.LAYOUT['legend_indent']
 
         def _add_legend_item(px, py, color, text, shape):
-            _draw_bar(px, py, color, hide_bar=True, shape=shape)
+            if shape == 'line':
+                self._canvas.create_line(px - self.LAYOUT['legend_line_length'] / 2, py,
+                                         px + self.LAYOUT['legend_line_length'] / 2, py,
+                                         fill=color,
+                                         width=self.LAYOUT['legend_line_width'])
+            else:
+                _draw_bar(px, py, iy=None, color=color, hide_bar=True, shape=shape)
+
             self._canvas.create_text(px + indent, py, text=text, fill='black', anchor='w')
 
-        _add_legend_item(cols_x[1], rows_y[0], 'unknown', text="- after alarm", shape='dot')
-        _add_legend_item(cols_x[1], rows_y[1], 'unknown', text='- before alarm', shape='square')
-        _add_legend_item(cols_x[1], rows_y[2], 'unknown', text='- planned alarm time', shape='triangle')
-        _add_legend_item(cols_x[0], rows_y[0], 'red', text='- alarm late', shape='dot')
-        _add_legend_item(cols_x[0], rows_y[1], 'yellow', text="- alarm good", shape='dot')
-        _add_legend_item(cols_x[0], rows_y[2], 'green', text="- alarm early", shape='dot')
+        _add_legend_item(cols_x[0], rows_y[0], 'unknown', text="- after alarm", shape='dot')
+        _add_legend_item(cols_x[0], rows_y[1], 'unknown', text='- before alarm', shape='square')
+        # _add_legend_item(cols_x[1], rows_y[2], 'unknown', text='- planned alarm time', shape='triangle')
+        _add_legend_item(cols_x[1], rows_y[0], 'red', text='- alarm late', shape='dot')
+        _add_legend_item(cols_x[1], rows_y[1], 'yellow', text="- alarm good", shape='dot')
+        _add_legend_item(cols_x[1], rows_y[2], 'green', text="- alarm early", shape='dot')
+
+        _add_legend_item(cols_x[0], rows_y[2], 'black', text="  period duration", shape='line')
+        _add_legend_item(cols_x[0], rows_y[3], 'gray', text="  target duration", shape='line')
 
         for i, duration in enumerate(durations):
             shape = 'square' if history['early'][i] else 'dot'
-            _draw_bar(px[i], py[i], history['outcomes'][i], shape=shape)
+            _draw_bar(px[i], py[i], iy=iy[i], color=history['outcomes'][i], shape=shape)
 
 
 if __name__ == "__main__":

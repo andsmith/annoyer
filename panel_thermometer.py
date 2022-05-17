@@ -41,9 +41,10 @@ class ThermometerPane(Pane):
                          'tic_labels': []}
 
         super(ThermometerPane, self).__init__(tk_root, tracker=tracker, grid_col=grid_col,
-                                              regions=['blank', self._shape, 'blank'], **kwargs)
+                                              regions=["Probability you\nare distracted:",
+                                                       self._shape,
+                                                       'blank'], **kwargs)
         self._canvas = self._pane_objects['middle']
-        self._title = self._pane_objects['top']
         self._status = self._pane_objects['bottom']
         self._canvas.bind("<Button-1>", self._click)
         self._canvas.bind("<Motion>", self._move)
@@ -108,9 +109,9 @@ class ThermometerPane(Pane):
 
         self.refresh()
 
-    LAYOUT = {'y_center': 0.84,
+    LAYOUT = {'y_center': 0.82,  # center of round part of "bulb" part of thermometer
               'x_center': 0.50,
-              'bulb_rad': 0.05,
+              'bulb_rad': 0.05,  # radius of bulb
               'bulb_angles': (- np.pi / 3.5, np.pi + np.pi / 3.5),
               'bulb_top': 0.025,
               'bulb_color': 'black',
@@ -210,12 +211,16 @@ class ThermometerPane(Pane):
         period_str = str(period_td - datetime.timedelta(microseconds=period_td.microseconds))
         elapsed_td = datetime.timedelta(seconds=self._tracker.get_elapsed_seconds())
         elapsed_str = str(elapsed_td - datetime.timedelta(microseconds=elapsed_td.microseconds))
-        remaining = int(self._tracker.predict_alarm_wait_time() - elapsed_td.total_seconds()) + 1
-        countdown_str = str(datetime.timedelta(seconds=remaining))
-
-        self._title.configure(text="P(distraction | t=%s) = %.4f\nP exceeds threshold in %s" % (
-            elapsed_str, current_prob, countdown_str))
-        self._status.configure(text="Estimated period between\n distractions:  %s" % (period_str,))
+        duration_sec = int(self._tracker.predict_alarm_wait_time())
+        remaining = int(duration_sec - elapsed_td.total_seconds()) + 1
+        countdown_str = str(datetime.timedelta(seconds=remaining)) if remaining > 0 else "-"
+        duration_str = str(datetime.timedelta(seconds=duration_sec))
+        status = ["1 / distraction rate (time):\t%s" % (period_str,),
+                  "sub-threshold duration:\t%s" % (duration_str,),
+                  "",
+                  "P(distraction | t=%s): \t%.5f" % (elapsed_str, current_prob),
+                  "Exceeds threshold in:\t%s" % (countdown_str,)]
+        self._status.configure(text="\n".join(status))
 
     def _resize(self, event):
         self._shape = (event.height, event.width)

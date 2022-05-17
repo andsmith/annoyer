@@ -25,7 +25,7 @@ class Pane(object):
     CANVAS_PARAMS = dict()  # dict(borderwidth=1, relief="solid")
 
     def __init__(self, tk_root, tracker=None, grid_col=0, callback=None,
-                 regions=(None, None, None), canvas_args=None,  frame_args=None):
+                 regions=(None, None, None), canvas_args=None, frame_args=None):
         """
         :param tk_root:  tk.Tk() object
         :param tracker:  HistoryTracker() object or None
@@ -89,7 +89,7 @@ class Pane(object):
                 self._pane_objects['bottom'] = tk.Frame(master=self._frame)
             else:
                 self._pane_objects['bottom'] = tk.Label(master=self._frame, text=self._regions['bottom'],
-                                                        **self.TEXT_LABEL_PARAMS)
+                                                        **self.TEXT_LABEL_PARAMS, justify=tk.LEFT)
             self._pane_objects['bottom'].grid(column=0, row=bottom_row, **self.TEXT_GRID_PARAMS)
             self._frame.rowconfigure(2, pad=self.DIMS['v_pad'], weight=self.DIMS['bottom_v_weight'])
         self._frame.columnconfigure(0, weight=1)

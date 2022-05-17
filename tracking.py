@@ -18,12 +18,12 @@ class HistoryTracker(object):
     Class to save/load & store results.
     """
 
-    def __init__(self, filename=None, settings=None):
+    def __init__(self, filename=None, default_alarm_file=None, settings=None):
         """
         :param filename:  load/save to here
         """
         self._start_time = time.time()
-
+        self._default_alarm_file = default_alarm_file
         if filename is None:
             filename = mktemp(suffix="_tracking.json")
             logging.warning("No filename given for tracker, creating temp file:  %s" % (filename,))
@@ -71,10 +71,12 @@ class HistoryTracker(object):
         self._save_data()
 
     def select_new_sound_file(self):
+
         filetypes = (('wav files', '*.wav'),
                      ('mp3 files', '*.mp3'),
                      ('all files', '*.*'))
-        sound_file = fd.askopenfilename(title='Select alarm sound to play...',
+
+        sound_file = fd.askopenfilename(title='Select alarm sound (CANCEL for silent)',
                                         filetypes=filetypes,
                                         initialdir='.')
 
@@ -85,6 +87,7 @@ class HistoryTracker(object):
             logging.info("Selected sound file:  %s" % (self._settings['sound_filename'],))
 
         self._settings['sound_filename'] = sound_file
+        print("s232")
         self._save_data()
         return sound_file
 
@@ -104,9 +107,9 @@ class HistoryTracker(object):
             logging.info("User file not found, creating:  %s " % (self._filename,))
             self._clear_data()
             self._settings.update(settings)
-
-            if self.get_option('sound_filename') is None:
-                self.select_new_sound_file()  # saves data
+            sound_file = self._default_alarm_file
+            logging.info("\tusing default sound:  %s" % (sound_file,))
+            self.set_option('sound_filename', sound_file)
 
         logging.info("User data:")
         logging.info("\thistory contains %i entries." % (len(self._history['durations']),))

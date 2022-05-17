@@ -25,6 +25,7 @@ class AnnoyerApp(object):
                    "stoplight": 1,
                    "graph": 2, }
     HISTORY_FILE = "history.json"
+    DEFAULT_ALARM_FILE = "alarm_lo.wav"
 
     def __init__(self, settings=None, delta_t_sec=.01):
         """
@@ -39,7 +40,7 @@ class AnnoyerApp(object):
         self._root = tk.Tk()
         self._root.title("Annoyer!")
 
-        self._tracker = HistoryTracker(self.HISTORY_FILE, settings=settings)
+        self._tracker = HistoryTracker(self.HISTORY_FILE, settings=settings, default_alarm_file=self.DEFAULT_ALARM_FILE)
 
         # state
         self._state = AnnoyerAppStates.WAITING
@@ -68,41 +69,60 @@ class AnnoyerApp(object):
         self._root.rowconfigure(0, weight=1)
 
         # finish
-        self._setup_buttons()
+        self._setup_ui()
         self.reset()
         self._clock()  # start ticking...
 
     def _make_stats_pane(self):
         return StatsPane(self._root, grid_col=2, tracker=self._tracker)
 
-    def _setup_buttons(self):
+    def _setup_ui(self):
         """
-        Add buttons for main app.
+        Add buttons/labels for main app.
         """
-        common_params = dict(ipadx=5, ipady=4, padx=8, pady=6)
-
+        button_params = dict(ipadx=2, ipady=2, padx=2, pady=1)
+        text_params = dict(padx=8, pady=2)
         # clear data
         self._clear_data_button = tk.Button(master=self._button_frame,
                                             text="Clear data.",
                                             command=self._clear_data)
-        self._clear_data_button.grid(column=0, row=0, **common_params)
+        self._clear_data_button.grid(column=0, row=0, **button_params, sticky='w')
 
         # change sound
         self._change_sound_button = tk.Button(master=self._button_frame,
-                                              text="Select new\nsound file.",
+                                              text="Change / mute\nsound.",
                                               command=self._select_new_sound_file)
-        self._change_sound_button.grid(column=1, row=0, **common_params)
+        self._change_sound_button.grid(column=1, row=0, **button_params, sticky='w')
 
         # show / hide graph
         self._show_graph_button = tk.Button(master=self._button_frame,
                                             text="Hide / show\ngraph -->",
                                             command=self._toggle_graph)
-        self._show_graph_button.grid(column=2, row=0, **common_params)
+        self._show_graph_button.grid(column=2, row=0, **button_params, sticky='w')
+
+        # labels
+        self._sound_file_label_text = tk.StringVar()
+
+        self._sound_file_label = tk.Label(master=self._button_frame, textvariable=self._sound_file_label_text,
+                                          justify=tk.RIGHT, **text_params)
+        self._sound_file_label.grid(column=0, row=1, columnspan=3, sticky='w')
+        self._update_ui()
 
         self._button_frame.columnconfigure(0, weight=1)
         self._button_frame.columnconfigure(1, weight=1)
         self._button_frame.columnconfigure(2, weight=1)
-        self._button_frame.rowconfigure(0, weight=1)
+        self._button_frame.rowconfigure(0, weight=2)
+        self._button_frame.rowconfigure(1, weight=1)
+
+    def _update_ui(self):
+        """
+        Text, etc., that needs updating.
+        """
+        sound_file = self._tracker.get_option('sound_filename')
+        button_text = "Alarm sound:  (none/silent)" if sound_file is None else \
+            "Alarm sound:  %s" % (os.path.split(sound_file)[1])
+        self._sound_file_label_text.set(button_text)
+        print(button_text, self._sound_file_label_text.get())
 
     def _select_new_sound_file(self):
         self._tracker.select_new_sound_file()
@@ -110,6 +130,7 @@ class AnnoyerApp(object):
         if self._play_obj is not None and self._play_obj.is_playing():
             self._play_obj.stop()
             self._play_obj = None
+        self._update_ui()
 
     def _clear_data(self):
         self._tracker.clear_history()
@@ -218,19 +239,20 @@ class AnnoyerApp(object):
         if alarm_was_on:
             self._become_unalarmed()
 
-        self._adapt_params(button, alarm_was_on=alarm_was_on)
+        self._adapt_params(button, alarm_was_on=alarm_was_on, no_save=True)  # will save in tracker.update_result()
         self._tracker.update_result(outcome_color=button, is_early=not alarm_was_on)
         if self._stats_pane is not None:
             self._stats_pane.refresh()
 
         self.reset()
 
-    def _adapt_params(self, button, alarm_was_on):
+    def _adapt_params(self, button, alarm_was_on, no_save=False):
         """
         Adapt rate to button presses.  For new, heuristic, later, Bayesian.
 
         :param button:  string, in {'red', 'green', 'yellow'}
         :param alarm_was_on:  Was the alarm running (True), or did the user press early (False)?
+        :param no_save: Don't save after setting new period
         """
         period_sec = self._tracker.get_option('period_sec')
         if alarm_was_on:
@@ -247,7 +269,7 @@ class AnnoyerApp(object):
                 period_sec *= 1.5
             elif button == 'yellow':
                 pass
-        self._tracker.set_option('period_sec', period_sec)
+        self._tracker.set_option('period_sec', period_sec, no_save=no_save)
 
 
 if __name__ == "__main__":

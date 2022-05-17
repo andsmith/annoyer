@@ -30,7 +30,7 @@ class StatsPane(Pane):
         logging.info("Creating stats pane.")
         self._resize_trigger = 0.95  # shrinking graph for more data
         self._resize_factor = 1.333
-        self._shape = (500, 400)
+        self._shape = (600, 400)
         self._n_bar_spaces = 10
         self._max_bar_width = 6
         super(StatsPane, self).__init__(tk_root,
@@ -50,9 +50,9 @@ class StatsPane(Pane):
         'bar_color': 'black',
         'margins': {'top': 0.00,
                     'right': 0.95,
-                    'bottom': 0.80,
+                    'bottom': 0.75,
                     'left': 0.2},
-        'legend_pos': (0.15, 0.85),
+        'legend_pos': (0.15, 0.80),
         'legend_row_spacing': 27,
         'legend_col_spacing': 120,
         'legend_indent': 12,
@@ -63,7 +63,8 @@ class StatsPane(Pane):
                            'yellow': 'yellow',
                            'unknown': None},
         'dot_size': 8,
-        'square_size': 7}
+        'square_size': 7,
+        'triangle_base_and_height': (14, 14)}
 
     def _resize(self, event):
         self._shape = (event.height, event.width)
@@ -180,7 +181,7 @@ class StatsPane(Pane):
         # draw bars
         px, py = self._calc_bars(y_max, durations=durations)
 
-        def _draw_bar(px, py, color, hide_bar=False, early_shape=False):
+        def _draw_bar(px, py, color, hide_bar=False, shape='round'):
             """
             Draw a bar for the bar graph, and put a marker on top to indicate which button ended it, and whether or not
             the alarm was sounding.
@@ -188,7 +189,7 @@ class StatsPane(Pane):
             :param py: bar has this height
             :param color: and this color
             :param hide_bar:  Don't plot the bar itself, just the marker (useful for legend)
-            :param early_shape:  use the early shape instead of the default
+            :param shape: one of 'dot' 'square' or 'triangle'
             """
 
             y0 = int(margins['bottom'])
@@ -200,23 +201,34 @@ class StatsPane(Pane):
                                                 p_x, p_y,
                                                 fill=self.LAYOUT['bar_color'],
                                                 width=self.LAYOUT['bar_width'])
-            dot_size = self.LAYOUT['dot_size']
-            square_size = self.LAYOUT['square_size']
             fill_color = self.LAYOUT['outcome_colors'][color] if self.LAYOUT['outcome_colors'][color] is not None else \
                 self._canvas['background']
-            if early_shape:
+            if shape == 'square':
+                square_size = self.LAYOUT['square_size']
                 marker = self._canvas.create_rectangle(p_x - square_size, p_y - square_size,
                                                        p_x + square_size, p_y + square_size,
                                                        fill=fill_color,
                                                        outline='black',
                                                        width=1)
 
-            else:
+            elif shape == 'dot':
+                dot_size = self.LAYOUT['dot_size']
                 marker = self._canvas.create_oval(p_x - dot_size, p_y - dot_size,
                                                   p_x + dot_size, p_y + dot_size,
                                                   fill=fill_color,
                                                   outline='black',
                                                   width=1)
+            elif shape == 'triangle':
+                triangle_base, triangle_height = self.LAYOUT['triangle_base_and_height']
+                coords = [px - triangle_base / 2, py + triangle_height / 2,
+                          px + triangle_base / 2, py + triangle_height / 2,
+                          px, py - triangle_height / 2]
+                marker = self._canvas.create_polygon(*coords,
+                                                     fill=fill_color,
+                                                     outline='black',
+                                                     width=1)
+            else:
+                raise Exception("Unknown marker shape:  %s" % (shape,))
 
             return line, marker
 
@@ -225,24 +237,26 @@ class StatsPane(Pane):
         row_0_y = legend_left[1]
         row_x = legend_left[0]
         self._canvas.create_text(row_x, row_0_y, text="Legend:")
-        rows_y = np.arange(1., 3.) * self.LAYOUT['legend_row_spacing'] + row_0_y
+        rows_y = np.arange(1., 4.) * self.LAYOUT['legend_row_spacing'] + row_0_y
         cols_x = np.arange(0., 4.) * self.LAYOUT['legend_col_spacing'] + row_x
 
         # shape
         indent = self.LAYOUT['legend_indent']
 
-        def _add_legend_item(px, py, color, text, early):
-            _draw_bar(px, py, color, hide_bar=True, early_shape=early)
+        def _add_legend_item(px, py, color, text, shape):
+            _draw_bar(px, py, color, hide_bar=True, shape=shape)
             self._canvas.create_text(px + indent, py, text=text, fill='black', anchor='w')
 
-        _add_legend_item(cols_x[0], rows_y[0], 'unknown', text="- after alarm", early=False)
-        _add_legend_item(cols_x[1], rows_y[0], 'unknown', text='- before alarm', early=True)
-        _add_legend_item(cols_x[0], rows_y[1], 'red', text='- alarm late', early=False)
-        _add_legend_item(cols_x[1], rows_y[1], 'yellow', text="- alarm good", early=False)
-        _add_legend_item(cols_x[2], rows_y[1], 'green', text="- alarm early", early=False)
+        _add_legend_item(cols_x[1], rows_y[0], 'unknown', text="- after alarm", shape='dot')
+        _add_legend_item(cols_x[1], rows_y[1], 'unknown', text='- before alarm', shape='square')
+        _add_legend_item(cols_x[1], rows_y[2], 'unknown', text='- planned alarm time', shape='triangle')
+        _add_legend_item(cols_x[0], rows_y[0], 'red', text='- alarm late', shape='dot')
+        _add_legend_item(cols_x[0], rows_y[1], 'yellow', text="- alarm good", shape='dot')
+        _add_legend_item(cols_x[0], rows_y[2], 'green', text="- alarm early", shape='dot')
 
         for i, duration in enumerate(durations):
-            _draw_bar(px[i], py[i], history['outcomes'][i], early_shape=history['early'][i])
+            shape = 'square' if history['early'][i] else 'dot'
+            _draw_bar(px[i], py[i], history['outcomes'][i], shape=shape)
 
 
 if __name__ == "__main__":

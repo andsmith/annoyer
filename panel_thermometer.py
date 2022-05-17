@@ -215,7 +215,7 @@ class ThermometerPane(Pane):
         remaining = int(duration_sec - elapsed_td.total_seconds()) + 1
         countdown_str = str(datetime.timedelta(seconds=remaining)) if remaining > 0 else "-"
         duration_str = str(datetime.timedelta(seconds=duration_sec))
-        status = ["1 / distraction rate (time):\t%s" % (period_str,),
+        status = ["1 / distraction rate:\t\t%s" % (period_str,),
                   "sub-threshold duration:\t%s" % (duration_str,),
                   "",
                   "P(distraction | t=%s): \t%.5f" % (elapsed_str, current_prob),

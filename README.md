@@ -1,5 +1,7 @@
 # annoyer
 Alarm system to predict when user is distracted &amp; "snap user out of it".
+## Statistical modeling of getting distracted
+[annoying_math.pdf](https://github.com/andsmith/annoyer/blob/main/annoying_math.pdf)
 
 ## Usage:
 1) run with this command:`> python annoyer.py`
@@ -24,6 +26,8 @@ You can push before or after the alarm has gone off.  Both will reset the timer 
 
 * To clear settings/history:  move/delete the file `history.json`.
 ## To do:
+* Figure out math for optimal updating.
+* Extend distraction model (not really memoryless)
 * Add units to x-axis of graph (timestamps/dates?)
 ## Credits:
 1) Sound clip from here: https://freesound.org/people/deleted_user_2906614/sounds/263621/

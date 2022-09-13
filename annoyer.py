@@ -14,7 +14,7 @@ from app_states import AnnoyerAppStates
 import numpy as np
 import simpleaudio as sa
 
-from tracking import HistoryTracker
+from tracking import HistoryTracker, Settings
 
 
 class AnnoyerApp(object):
@@ -24,13 +24,10 @@ class AnnoyerApp(object):
     COL_WEIGHTS = {"thermometer": 1,
                    "stoplight": 1,
                    "graph": 2, }
-    HISTORY_FILE = "history.json"
-    DEFAULT_ALARM_FILE = "alarm_lo.wav"
 
-    def __init__(self, settings=None, delta_t_sec=.01):
+    def __init__(self, delta_t_sec=.01):
         """
         Start app.  Params always override loaded values / defaults.
-        :param settings:  dict with user settings for tracker (see tracking.HistoryTracker for details)
         :param delta_t_sec:  For updating UI
         """
         # params
@@ -39,8 +36,8 @@ class AnnoyerApp(object):
         # UI
         self._root = tk.Tk()
         self._root.title("Annoyer!")
-
-        self._tracker = HistoryTracker(self.HISTORY_FILE, settings=settings, default_alarm_file=self.DEFAULT_ALARM_FILE)
+        self._settings = Settings()
+        self._tracker = HistoryTracker(self._settings)
 
         # state
         self._state = AnnoyerAppStates.WAITING
@@ -59,7 +56,7 @@ class AnnoyerApp(object):
         self._update_functions = [self._thermometer_pane.update_tick,
                                   self._stoplight_pane.update_tick]  # stats panel not updated in real time
         # optional UI objects
-        if self._tracker.get_option('show_graph'):
+        if self._settings.get_option('show_graph'):
             self._stats_pane = self._make_stats_pane()
             self._root.columnconfigure(2, weight=self.COL_WEIGHTS['graph'])
 
@@ -79,7 +76,6 @@ class AnnoyerApp(object):
     def _restart_timer(self):
         self.reset()
         self._check_for_alarm()
-
 
     def _setup_ui(self):
         """
@@ -115,8 +111,8 @@ class AnnoyerApp(object):
         self._sound_file_label_text = tk.StringVar()
 
         self._sound_file_label = tk.Label(master=self._button_frame, textvariable=self._sound_file_label_text,
-                                            **text_params)
-        self._sound_file_label.grid(column=0, row=2, columnspan=2 )
+                                          **text_params)
+        self._sound_file_label.grid(column=0, row=2, columnspan=2)
         self._update_ui()
 
         self._button_frame.columnconfigure(0, weight=1)
@@ -129,14 +125,14 @@ class AnnoyerApp(object):
         """
         Text, etc., that needs updating.
         """
-        sound_file = self._tracker.get_option('sound_filename')
+        sound_file = self._settings.get_option('sound_filename')
         button_text = "Alarm sound:  (none/silent)" if sound_file is None else \
             "Alarm sound:  %s" % (os.path.split(sound_file)[1])
         self._sound_file_label_text.set(button_text)
         print(button_text, self._sound_file_label_text.get())
 
     def _select_new_sound_file(self):
-        self._tracker.select_new_sound_file()
+        self._settings.select_new_sound_file()
 
         if self._play_obj is not None and self._play_obj.is_playing():
             self._play_obj.stop()
@@ -152,12 +148,12 @@ class AnnoyerApp(object):
         """
         Show/hide graph part of app
         """
-        if self._tracker.get_option('show_graph'):
-            self._tracker.set_option('show_graph', False)
+        if self._settings.get_option('show_graph'):
+            self._settings.set_option('show_graph', False)
             self._stats_pane.deactivate()
             self._stats_pane = None
         else:
-            self._tracker.set_option('show_graph', True)
+            self._settings.set_option('show_graph', True)
             self._stats_pane = self._make_stats_pane()
             self._root.columnconfigure(2, weight=self.COL_WEIGHTS['graph'])
 
@@ -173,9 +169,9 @@ class AnnoyerApp(object):
         self._state = AnnoyerAppStates.ALARMING
 
     def _play_sound(self):
-        if self._tracker.get_option('sound_filename') is not None:
+        if self._settings.get_option('sound_filename') is not None:
             self._wave_obj = self._wave_obj if self._wave_obj is not None else sa.WaveObject.from_wave_file(
-                self._tracker.get_option('sound_filename'))
+                self._settings.get_option('sound_filename'))
 
             if self._play_obj is not None:
                 if not self._play_obj.is_playing():
@@ -209,7 +205,7 @@ class AnnoyerApp(object):
             Update all panes.
             Check if it's time for the alarm.
         """
-        self._tracker.update_tick()
+        self._settings.update_tick()
         for update_func in self._update_functions:
             update_func()
         self._check_for_alarm()
@@ -236,7 +232,7 @@ class AnnoyerApp(object):
         """
         # logging.info("Annoyer - Adjusting threshold:  %s" % (thresh,))
         suppress_save = self._thermometer_pane.is_sliding()
-        self._tracker.set_option('p_threshold', thresh, no_save=suppress_save)
+        self._settings.set_option('p_threshold', thresh, save=not suppress_save)
         self._check_for_alarm()
 
     def _handle_buttons(self, button):
@@ -268,7 +264,7 @@ class AnnoyerApp(object):
         :param alarm_was_on:  Was the alarm running (True), or did the user press early (False)?
         :param no_save: Don't save after setting new period
         """
-        period_sec = self._tracker.get_option('period_sec')
+        period_sec = self._settings.get_option('period_sec')
         if alarm_was_on:
             if button == 'red':
                 period_sec /= 1.5  # placeholder for bayesian stats...
@@ -283,7 +279,7 @@ class AnnoyerApp(object):
                 period_sec *= 1.5
             elif button == 'yellow':
                 pass
-        self._tracker.set_option('period_sec', period_sec, no_save=no_save)
+        self._settings.set_option('period_sec', period_sec, save = not no_save)
 
 
 if __name__ == "__main__":

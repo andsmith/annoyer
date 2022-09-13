@@ -5,7 +5,7 @@ from copy import deepcopy
 from abc import abstractmethod
 import logging
 import tkinter as tk
-from tracking import HistoryTracker
+from tracking import HistoryTracker, Settings
 
 
 class Pane(object):
@@ -24,11 +24,12 @@ class Pane(object):
     TEXT_LABEL_PARAMS = dict()  # dict(borderwidth=1, relief="solid")
     CANVAS_PARAMS = dict()  # dict(borderwidth=1, relief="solid")
 
-    def __init__(self, tk_root, tracker=None, grid_col=0, callback=None,
+    def __init__(self, tk_root, tracker=None, settings=None, grid_col=0, callback=None,
                  regions=(None, None, None), canvas_args=None, frame_args=None):
         """
         :param tk_root:  tk.Tk() object
         :param tracker:  HistoryTracker() object or None
+        :param settings:  Settings() object or None
         :param grid_col:  Which column of app?
         :param callback: if the pane needs to notify the main app for something, use this function.
         :param regions:  3-tuple (text for top, (h, w) of middle canvas, text for bottom), or NONE for one/two of those.
@@ -36,8 +37,8 @@ class Pane(object):
             :param canvas_args:  arguments to initialize the tkinter Canvas object
         :param frame_args:  more arguments to Frame(**frame_args)
         """
-        self._tracker = tracker if tracker is not None else HistoryTracker()
-
+        self._settings = settings if settings is not None else Settings()
+        self._tracker = tracker if tracker is not None else HistoryTracker(settings=self._settings)
         self._canvas_args = canvas_args if canvas_args is not None else {}
         self._callback = callback
         self._regions = {'top': regions[0], 'middle': regions[1], 'bottom': regions[2]}

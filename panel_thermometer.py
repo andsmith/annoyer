@@ -15,7 +15,7 @@ class ThermometerPane(Pane):
     """
     MAX_FRAC = 0.9999  # maximum prob. thresh.
 
-    def __init__(self, tk_root, tracker=None, grid_col=0, **kwargs):
+    def __init__(self, tk_root, tracker=None, settings=None,grid_col=0, **kwargs):
         """
         Start the "thermometer pane".
         :param tk_root: tk.Tk() object / frame
@@ -40,7 +40,7 @@ class ThermometerPane(Pane):
                          'tic_lines': [],
                          'tic_labels': []}
 
-        super(ThermometerPane, self).__init__(tk_root, tracker=tracker, grid_col=grid_col,
+        super(ThermometerPane, self).__init__(tk_root, tracker=tracker, settings=settings, grid_col=grid_col,
                                               regions=["Probability you\nare distracted:",
                                                        self._shape,
                                                        'blank'], **kwargs)
@@ -78,7 +78,7 @@ class ThermometerPane(Pane):
         """
         self._mouse_buttons['left'] = None  # signal for not sliding anymore
         if self._callback is not None:
-            self._callback(self._tracker.get_option('p_threshold'))
+            self._callback(self._settings.get_option('p_threshold'))
 
     def is_sliding(self):
         return self._mouse_buttons['left'] is not None
@@ -130,7 +130,7 @@ class ThermometerPane(Pane):
         Re-draw all the things.
         """
         self._canvas.delete('all')
-        thresh = self._tracker.get_option('p_threshold')
+        thresh = self._settings.get_option('p_threshold')
         # BODY
         theta = np.linspace(self.LAYOUT['bulb_angles'][0], self.LAYOUT['bulb_angles'][1], 100)[::-1]
         aspect = float(self._shape[1]) / float(self._shape[0])
@@ -207,7 +207,7 @@ class ThermometerPane(Pane):
                                                                    fill=self.LAYOUT['instructions_color'])
 
         # text
-        period_td = datetime.timedelta(seconds=self._tracker.get_option('period_sec'))
+        period_td = datetime.timedelta(seconds=self._settings.get_option('period_sec'))
         period_str = str(period_td - datetime.timedelta(microseconds=period_td.microseconds))
         elapsed_td = datetime.timedelta(seconds=self._tracker.get_elapsed_seconds())
         elapsed_str = str(elapsed_td - datetime.timedelta(microseconds=elapsed_td.microseconds))

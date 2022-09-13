@@ -50,6 +50,7 @@ class Settings(object):
         if save:
             self._save()
         if update_app:
+
             self.update_tick()  # if settings change may trigger app change
 
     def update_tick(self):
@@ -148,11 +149,10 @@ class HistoryTracker(object):
         """
         Write all history/settings to file.
         """
-        data = {'history': self._history,
-                'settings': self._settings}
+
         logging.info("Writing user file:  %s " % (self._filename,))
         with open(self._filename, 'w') as outfile:
-            json.dump(data, outfile)
+            json.dump(self._history, outfile)
 
     def get_elapsed_seconds(self):
         now = time.time()
